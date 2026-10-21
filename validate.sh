@@ -9,9 +9,9 @@ echo "== 0. isolation check =="
 ./lab.sh check || { echo "[abort] lab is not isolated"; exit 1; }
 
 echo "== 1. benign canary probe (inert PHP comment, lab target only) =="
-$C exec analysis python3 -I /sample/../tests/canary_probe.py --url "http://target:8080/index.php" 2>/dev/null \
+$C exec analysis python3 -I /sample/../tests/canary_probe.py --url "http://target/index.php" 2>/dev/null \
   || $C cp tests/canary_probe.py analysis:/tmp/canary_probe.py \
-     && $C exec analysis python3 -I /tmp/canary_probe.py --url "http://target:8080/index.php"
+     && $C exec analysis python3 -I /tmp/canary_probe.py --url "http://target/index.php"
 
 echo "== 2. confirm session poison in target (read-only) =="
 $C cp tests/check_poison.py target:/tmp/check_poison.py

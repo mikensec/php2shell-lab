@@ -58,7 +58,7 @@ def build_body(boundary: str, sid: str) -> bytes:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--url", default="http://target:8080/index.php",
+    ap.add_argument("--url", default="http://target/index.php",
                     help="lab target URL (default compose service 'target')")
     ap.add_argument("--sid", default="labcanary" + uuid.uuid4().hex[:24],
                     help="session id to inject (must be [A-Za-z0-9,-])")

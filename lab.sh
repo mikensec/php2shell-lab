@@ -51,7 +51,7 @@ case "${1:-}" in
       if curl -sS -m3 https://1.1.1.1 >/dev/null 2>&1; then echo "[FAIL] reached internet"; exit 1; fi
       echo "[ok] no internet route — isolated"' ;;
   target)
-    h="$(victim_host)"; port=$([ "$h" = wp-victim ] && echo 80 || echo 8080)
+    h="$(victim_host)"; port=80   # both victims serve on apache's port 80 inside labnet
     echo "http://$h:$port/" ;;
   triage)  [ $# -ge 2 ] || { usage; exit 1; }
            $C exec analysis bash /opt/lab/static-triage.sh "$(san "$2")" ;;
@@ -59,7 +59,7 @@ case "${1:-}" in
            f="$(san "$2")"; shift 2
            $C exec analysis bash /opt/lab/run-poc.sh "$f" "$@" ;;
   probe)
-    h="$(victim_host)"; port=$([ "$h" = wp-victim ] && echo 80 || echo 8080)
+    h="$(victim_host)"; port=80   # both victims serve on apache's port 80 inside labnet
     $C cp tests/canary_probe.py analysis:/tmp/canary_probe.py
     $C exec analysis python3 -I /tmp/canary_probe.py --url "http://$h:$port/index.php" ;;
   collect) $C exec analysis bash /opt/lab/collect-artifacts.sh ;;

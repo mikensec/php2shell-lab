@@ -49,7 +49,7 @@ docker cp php2shell-analysis:/artifacts/bundle-<ts>.tar.gz .
 The attacker box (`analysis`) is always up. Pick one victim:
 
 ```bash
-./lab.sh up               # plain stock-PHP target  (host: target:8080)
+./lab.sh up               # plain stock-PHP target  (host: target:80)
 ./lab.sh up wordpress     # WordPress + MariaDB      (host: wp-victim:80)
 ./lab.sh target           # prints the current victim URL to aim at
 ./lab.sh probe            # fire the BENIGN canary at the current victim
