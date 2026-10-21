@@ -121,8 +121,68 @@ its DB sit on the same `internal` network: no host, no internet.
 ```
 
 The target is a **stock** `php:<tag>` image plus capture — there is no deliberately
-vulnerable code in this repo. To reproduce a specific affected build, set `PHP_TAG`
-in `.env` to that version once php.net publishes the affected range.
+vulnerable code in this repo. The "vulnerability" is simply the PHP version you pin:
+pick an affected release and PHP itself provides the flaw. See
+[Reproducing the vulnerable build](#reproducing-the-vulnerable-build) below.
+
+## Reproducing the vulnerable build
+
+CVE-2026-109618 / CVE-2026-109619 ("php2shell") were published **2026-10-21**: a
+`session.upload_progress` use-after-free in PHP core leading to RCE. Upstream fixes:
+
+| Branch | Fixed in | Last vulnerable |
+|--------|----------|-----------------|
+| 8.5    | 8.5.12   | 8.5.11 |
+| 8.4    | 8.4.27   | 8.4.26 |
+| 8.3    | 8.3.36   | **8.3.35** |
+| 8.2    | 8.2.35   | 8.2.34 |
+| ≤ 8.1  | EOL — no official fix | (confirm on php.net) |
+
+A build **below** the fix for its branch is vulnerable; `>=` the fix is patched.
+Always confirm the range against the official advisory on
+[php.net](https://www.php.net/) / NVD before trusting it.
+
+**The lab now ships vulnerable by default:** `.env` pins `PHP_TAG=8.3.35-apache`
+(the last 8.3 before the 8.3.36 fix). Do **not** use a floating tag like
+`8.3-apache` to reproduce — it resolves to the patched 8.3.36.
+
+```bash
+cp .env.example .env            # already pins 8.3.35-apache + FIXED_IN=8.3.36
+docker pull php:8.3.35-apache   # fetch the exact vulnerable image
+./lab.sh up                     # build + start against it
+./lab.sh version                # -> [VULNERABLE] 8.3.35 < 8.3.36
+```
+
+`./lab.sh version` runs `php -v` inside the current victim and compares it to
+`FIXED_IN` in `.env`, printing `VULNERABLE` or `PATCHED`. To confirm a fix closes
+it, set `PHP_TAG=8.3.36-apache`, `./lab.sh up` again, and re-check.
+
+For a frozen, bit-for-bit image, pin by **digest** instead of tag:
+
+```bash
+docker image inspect php:8.3.35-apache --format '{{index .RepoDigests 0}}'
+# -> php@sha256:...   put that in PHP_TAG so the build can never drift to a fix
+```
+
+### WordPress
+
+The `wordpress:*-php8.3-apache` tags bake PHP in and float to the latest 8.3.x,
+which is now the **patched** 8.3.36. To keep the WP victim vulnerable, capture the
+digest of an image that still carries PHP ≤ 8.3.35 **before** WordPress rebuilds,
+and pin it:
+
+```bash
+docker pull wordpress:6.6-php8.3-apache
+docker run --rm wordpress:6.6-php8.3-apache php -v      # verify it's <= 8.3.35
+docker image inspect wordpress:6.6-php8.3-apache \
+  --format '{{index .RepoDigests 0}}'                  # -> wordpress@sha256:...
+# set WP_TAG to that digest in .env, then: ./lab.sh up wordpress && ./lab.sh version
+```
+
+> Even on a vulnerable PHP, `session.upload_progress` injection only becomes code
+> execution through an app-side `include()`/`require()` of the session file. Stock
+> WordPress does not provide that sink — the WP scenario is for observing the
+> primitive and validating detections on a realistic stack, not turnkey RCE.
 
 ## For stronger isolation
 

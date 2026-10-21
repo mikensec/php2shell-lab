@@ -42,6 +42,9 @@ preflight(){
 victim_host(){ [ "$PROFILE" = wordpress ] && echo wp-victim || echo target; }
 victim_svc(){  victim_host; }   # service name == hostname here
 
+# Read a KEY=value from .env (no sourcing; tolerate missing file).
+env_val(){ [ -f .env ] && sed -n "s/^$1=//p" .env | tail -1 || true; }
+
 usage(){ cat <<EOF
 PHP2Shell detection lab — offline analysis harness (bring your own sample).
 
@@ -55,6 +58,7 @@ PHP2Shell detection lab — offline analysis harness (bring your own sample).
   ./lab.sh logs                  tail the victim's php error log
   ./lab.sh down                  stop and remove everything (incl. volumes)
   ./lab.sh doctor                check host prerequisites (docker, daemon, compose)
+  ./lab.sh version               print the victim's running PHP + VULNERABLE/PATCHED
 
 Current scenario: $PROFILE   (victim host: $(victim_host))
 Put your sample in ./sample/ (.gitignored). Paths are relative to ./sample.
@@ -65,7 +69,7 @@ san(){ local f="$1"; f="${f#./sample/}"; f="${f#sample/}"; echo "/sample/$f"; }
 
 # Everything except help/target/doctor needs a working Docker + Compose stack.
 case "${1:-}" in
-  up|check|triage|run|probe|collect|logs|down)
+  up|check|triage|run|probe|collect|logs|down|version)
     preflight "$@"
     C="$DC --profile $PROFILE" ;;
 esac
@@ -108,5 +112,20 @@ case "${1:-}" in
     echo "[ok] daemon:  reachable"
     echo "[ok] compose: $DC ($($DC version --short 2>/dev/null || echo present))"
     echo "[ok] prerequisites satisfied — ./lab.sh up to start." ;;
+  version)
+    svc="$(victim_svc)"
+    running="$($C exec -T "$svc" php -r 'echo PHP_VERSION;' 2>/dev/null)"
+    [ -n "$running" ] || { echo "[!] victim '$svc' not running — ./lab.sh up first." >&2; exit 1; }
+    fixed="$(env_val FIXED_IN)"
+    echo "[*] victim : $svc"
+    echo "[*] PHP    : $running"
+    if [ -z "$fixed" ]; then
+      echo "[?] FIXED_IN not set in .env — cannot judge vulnerable vs patched."
+    elif [ "$running" = "$fixed" ] || \
+         [ "$(printf '%s\n%s\n' "$running" "$fixed" | sort -V | head -1)" = "$fixed" ]; then
+      echo "[PATCHED]    $running >= $fixed (CVE-2026-109618/109619 fixed)"
+    else
+      echo "[VULNERABLE] $running < $fixed — php2shell (CVE-2026-109618/109619) build"
+    fi ;;
   *)       usage ;;
 esac
