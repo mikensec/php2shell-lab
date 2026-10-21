@@ -73,14 +73,25 @@ services:
       WORDPRESS_DB_PASSWORD: wp_lab_pw
       WORDPRESS_DB_NAME: wp
     depends_on: [wp-db]
-    networks: [labnet]
+    # labnet (internal) carries attacker<->victim traffic; edge (non-internal) exists
+    # only so the host can browse WordPress. wp-db + analysis stay on labnet alone.
+    networks: [labnet, edge]
     cap_drop: [ALL]
-    cap_add: [NET_RAW, NET_ADMIN]
+    # WordPress's first-run entrypoint (as root) unpacks core files and chowns them
+    # to www-data (33:33) before Apache drops privileges — it needs these file/uid
+    # caps or the container exits 2 on "Cannot change ownership". NET_RAW/NET_ADMIN
+    # are for the in-container tcpdump.
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID, NET_RAW, NET_ADMIN]
     security_opt: ["no-new-privileges:true"]
     volumes:
       - captures:/captures
       - wp-html:/var/www/html
-    # no published ports: reachable only from the attacker on labnet
+    # Browse WordPress from the host at http://localhost:8080 (bound to loopback).
+    # NOTE: this gives wp-victim a route off labnet (incl. internet egress) — it is
+    # NOT air-gapped while published. Fine for driving the benign WP app; do not
+    # detonate untrusted PoCs against a host-exposed victim.
+    ports:
+      - "127.0.0.1:8080:80"
 
   wp-db:
     profiles: ["wordpress"]
@@ -100,6 +111,8 @@ networks:
   labnet:
     internal: true          # <-- the isolation. air-gapped from host + internet.
     driver: bridge
+  edge:
+    driver: bridge          # host-reachable; only wp-victim joins it, for port publish
 
 volumes:
   captures:

@@ -81,7 +81,10 @@ case "${1:-}" in
     echo "$prof" > "$SCENARIO_FILE"
     $DC --profile "$prof" up -d --build
     echo "[*] scenario '$prof' up. victim host: $([ "$prof" = wordpress ] && echo wp-victim || echo target)"
-    [ "$prof" = wordpress ] && echo "[*] WordPress may take ~30-60s to finish first-run DB setup."
+    if [ "$prof" = wordpress ]; then
+      echo "[*] WordPress may take ~30-60s to finish first-run DB setup."
+      echo "[*] browse it from THIS machine at: http://localhost:8080  (attacker uses http://wp-victim/)"
+    fi
     ;;
   check)
     $C exec analysis sh -lc '
