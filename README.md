@@ -184,6 +184,60 @@ docker image inspect wordpress:6.6-php8.3-apache \
 > WordPress does not provide that sink — the WP scenario is for observing the
 > primitive and validating detections on a realistic stack, not turnkey RCE.
 
+## Handler-mismatch endpoints (`target` only)
+
+The `target` (plain) image also ships two tiny, logic-free endpoints that
+reproduce the **configuration** half of the handler-mismatch primitive —
+two apps sharing one `session.save_path` with different
+`session.serialize_handler` values — which `sample/verify_handler_mismatch.py`
+assumes exists:
+
+| Path | `.htaccess` sets | Role |
+|------|------------------|------|
+| `/app/upload.php` | `session.serialize_handler = php_serialize` | write side |
+| `/api/endpoint.php` | `session.serialize_handler = php` | read side |
+
+Neither script contains app logic beyond `session_start()` — no
+`include()`/`require()` sink, consistent with this repo's standing policy.
+(WordPress is deliberately left untouched — it stays the "no planted setup"
+scenario the rest of the README promises.)
+
+**Verified behavior**, isolated with a manual request carrying the *same*
+`Cookie: PHPSESSID=<sid>` on both legs (continuity PHP's own `session_start()`
+needs — see caveat below):
+
+```
+POST /app/upload.php   → writes the session in php_serialize format,
+                          attacker filename landing raw inside it
+POST /api/endpoint.php → reads it with the 'php' handler; $_SESSION comes
+                          back empty, and /captures/php_error.log shows:
+                            Failed to decode session object. Session has
+                            been destroyed.
+```
+
+That's a real, reproducible decode failure from the format mismatch — not
+inferred from the sample's own comments. It stops at "session destroyed";
+turning a *successful* deserialize into `__destruct`-driven code execution
+is the separate, unresolved territory `sample/verify_uaf_asan.php` targets
+(and that file needs an ASAN-instrumented PHP build to run at all — it isn't
+something `./lab.sh run` can drive).
+
+**Two caveats worth knowing before you trust a clean run:**
+
+- `verify_handler_mismatch.py`'s `upload()` helper sends **no `Cookie`
+  header** on either request. Without one, each endpoint's own
+  `session_start()` mints an unrelated fresh session (PHP won't resume a
+  session from a POST-body field alone), so the script as committed never
+  actually reaches the file it just wrote — add a `Cookie: PHPSESSID=<sid>`
+  header to both requests to get the real result above.
+- The *other* sample, `verify_session_injection.py`, sends both a POST-body
+  `PHPSESSID` field **and** a `Cookie` header for it. That proves ordinary
+  cookie-based session continuation — not the cookie-less fixation bypass
+  its own docstring describes. To see the actual bypass, drop the `Cookie`
+  header and send only the POST-body field; against `/index.php` (no
+  explicit `session_start()` in that script) you'll see the chosen session
+  ID accepted with no `Set-Cookie` push-back.
+
 ## For stronger isolation
 
 Docker shares the host kernel. For a kernel-0day or anything you don't trust against a

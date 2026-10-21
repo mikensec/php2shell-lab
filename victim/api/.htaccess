@@ -1,0 +1,3 @@
+# LAB ONLY: this directory's session reads/writes use the 'php' handler,
+# matching verify_handler_mismatch.py's --read-path assumption. See README.
+php_value session.serialize_handler php

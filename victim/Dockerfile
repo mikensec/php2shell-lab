@@ -12,6 +12,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN printf '<?php phpinfo(INFO_GENERAL); ' > /var/www/html/index.php \
     && mkdir -p /captures
 
+# LAB ONLY: /app and /api reproduce the "two apps, one shared session
+# save_path, mismatched session.serialize_handler" setup that the
+# handler-mismatch primitive (CVE-2026-109618/109619) needs. Each dir's
+# .htaccess sets its own handler via mod_php; the two endpoint scripts carry
+# no app logic and no include()/require() sink — see those files for detail.
+COPY apache-lab-override.conf /etc/apache2/conf-enabled/zz-lab-override.conf
+COPY app/ /var/www/html/app/
+COPY api/ /var/www/html/api/
+
 # Verbose logging to help detection engineering.
 #
 # LAB ONLY: session.upload_progress.cleanup = Off leaves the progress entry
