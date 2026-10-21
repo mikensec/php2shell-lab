@@ -25,7 +25,7 @@ Run it only inside the offline lab, against your own container.
 import argparse, ipaddress, socket, sys, urllib.parse, urllib.request, uuid
 
 CANARY = f"<?php /* php2shell-lab inert canary {uuid.uuid4().hex[:8]} - NOT a shell */ ?>"
-LAB_NAMES = {"target", "localhost", "php2shell-target"}
+LAB_NAMES = {"target", "localhost", "php2shell-target", "wp-victim", "php2shell-wp"}
 
 
 def is_lab_target(host: str) -> bool:

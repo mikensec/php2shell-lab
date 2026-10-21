@@ -7,3 +7,4 @@ artifacts/*
 *.pcap
 *.tar.gz
 .env
+.scenario

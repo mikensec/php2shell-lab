@@ -44,6 +44,30 @@ Copy the bundle out and feed it to your detection workflow:
 docker cp php2shell-analysis:/artifacts/bundle-<ts>.tar.gz .
 ```
 
+## Scenarios: plain PHP or WordPress victim
+
+The attacker box (`analysis`) is always up. Pick one victim:
+
+```bash
+./lab.sh up               # plain stock-PHP target  (host: target:8080)
+./lab.sh up wordpress     # WordPress + MariaDB      (host: wp-victim:80)
+./lab.sh target           # prints the current victim URL to aim at
+./lab.sh probe            # fire the BENIGN canary at the current victim
+./lab.sh run poc.py --url http://wp-victim/    # your own PoC vs WordPress
+```
+
+The WordPress victim is **stock WordPress + PHP + MariaDB**, instrumented for
+packet capture and verbose PHP logging. There is no planted vulnerability, no
+include-sink, and no webshell — it is a realistic PHP app to fire at and observe.
+First boot takes ~30-60s for WordPress to set up its database. Both WordPress and
+its DB sit on the same `internal` network: no host, no internet.
+
+> Reminder: `session.upload_progress` content-injection only becomes code
+> execution through an application-side `include()`/`require()` of the session
+> file. Stock WordPress does not hand you that sink. The lab lets you observe the
+> primitives and validate detections on a real stack; turning it into RCE would
+> require a separately vulnerable app/plugin, which this repo does not provide.
+
 ## What you get in a bundle
 
 | Artifact | Use |

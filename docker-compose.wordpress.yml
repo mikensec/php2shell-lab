@@ -1,0 +1,101 @@
+# WordPress victim + attacker lab — offline, bring-your-own-PoC.
+#
+# Roles you drive:
+#   victim   -> WordPress (Apache + PHP), the target application
+#   attacker -> python/strace/tcpdump box that launches YOUR PoC from ./sample
+# Supporting:
+#   db          -> MariaDB for WordPress
+#   victim-cap  -> tcpdump sidecar sharing the victim's network namespace
+#
+# Everything is on `labnet` with internal: true -> containers reach each other and
+# NOTHING else (no host, no internet) at run time. Image pulls need internet the
+# first time only.
+#
+#   docker compose -f docker-compose.wordpress.yml up -d --build
+#   ./wp-lab.sh check                 # prove the attacker has no internet route
+#   ./wp-lab.sh canary                # my benign inert-canary probe vs WordPress
+#   ./wp-lab.sh run your_poc.py       # launch YOUR PoC from ./sample at the victim
+#   ./wp-lab.sh collect               # bundle pcaps + session files + logs
+#   docker compose -f docker-compose.wordpress.yml down -v
+
+services:
+  db:
+    image: mariadb:11
+    container_name: php2shell-db
+    networks: [labnet]
+    environment:
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wp
+      MARIADB_PASSWORD: ${WORDPRESS_DB_PASSWORD:-labonly_wp_pw}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-labonly_root_pw}
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - dbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  victim:
+    # Pin PHP via the WordPress tag, e.g. php8.3-apache / php8.2-apache.
+    image: wordpress:${WP_PHP_TAG:-php8.3-apache}
+    container_name: php2shell-victim
+    hostname: victim
+    networks: [labnet]
+    depends_on:
+      db:
+        condition: service_healthy
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wp
+      WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD:-labonly_wp_pw}
+      # Turn on the feature under study + verbose logging for detection work.
+      WORDPRESS_CONFIG_EXTRA: |
+        @ini_set('session.upload_progress.enabled', '1');
+        @ini_set('log_errors', 'On');
+        @ini_set('error_log', '/captures/php_error.log');
+    volumes:
+      - wpdata:/var/www/html
+      - captures:/captures
+    # no published ports: not reachable from your host, only from the attacker box
+
+  victim-cap:
+    build: ./capture
+    container_name: php2shell-victim-cap
+    network_mode: "service:victim"     # capture exactly what the victim sees
+    depends_on: [victim]
+    cap_drop: [ALL]
+    cap_add: [NET_RAW, NET_ADMIN]
+    volumes:
+      - captures:/captures
+
+  attacker:
+    build: ./analysis                  # reuses the python+strace+tcpdump image
+    container_name: php2shell-attacker
+    hostname: attacker
+    networks: [labnet]
+    cap_drop: [ALL]
+    cap_add: [NET_RAW, SYS_PTRACE]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - ./sample:/sample:ro            # YOUR PoC goes here (gitignored)
+      - ./tests:/tests:ro              # my benign canary probe
+      - ./artifacts:/artifacts
+      - captures:/captures
+    working_dir: /opt/lab
+    command: ["sleep", "infinity"]
+    pids_limit: 256
+    mem_limit: 1g
+
+networks:
+  labnet:
+    internal: true          # <-- air-gapped from host + internet
+    driver: bridge
+
+volumes:
+  dbdata:
+  wpdata:
+  captures:
