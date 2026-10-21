@@ -9,13 +9,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       tcpdump procps \
     && rm -rf /var/lib/apt/lists/*
 
+# LAB ONLY: session.upload_progress.cleanup = Off leaves the progress entry
+# (incl. the attacker-controlled filename) on disk after the request completes,
+# instead of PHP's stock "wipe it the instant the upload finishes" behaviour.
+# This doesn't change what the vulnerability can do — the injected content
+# exists either way — it just stops this harness from erasing the evidence
+# before you can read it. Never set this in a production php.ini.
 RUN mkdir -p /captures \
     && { \
       echo 'log_errors = On'; \
       echo 'error_log = /captures/wp_php_error.log'; \
       echo 'display_errors = Off'; \
-      # leave session.upload_progress at stock defaults; override only in the lab
-      echo '; session.upload_progress.cleanup = On  (stock; do not relax in prod)'; \
+      echo 'session.upload_progress.enabled = On'; \
+      echo 'session.upload_progress.cleanup = Off'; \
     } > /usr/local/etc/php/conf.d/zz-lab-logging.ini
 
 COPY wp-entrypoint.sh /usr/local/bin/wp-lab-entrypoint.sh
