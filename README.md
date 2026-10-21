@@ -18,12 +18,40 @@ turning what you observe into detection content (YARA / Sigma / Suricata).
 
 ## Requirements
 
-- Docker + Docker Compose v2 (`docker compose`). Linux host, WSL2, or Docker Desktop.
+- **Docker Engine** (the daemon must be running).
+- **Docker Compose** — either the v2 plugin (`docker compose`) or the standalone
+  `docker-compose` binary. `lab.sh` auto-detects whichever is present.
+- A Linux host, WSL2, or Docker Desktop.
 - No internet needed at run time (only to build images the first time).
+
+### Install the prerequisites (Debian / Kali / Ubuntu)
+
+```bash
+sudo apt update
+sudo apt install -y docker.io docker-compose     # engine + compose v2
+sudo systemctl enable --now docker               # start the daemon
+sudo usermod -aG docker "$USER"                   # run docker without sudo
+#   log out and back in (or run `newgrp docker`) for the group to take effect
+```
+
+On other distros / Docker Desktop, install Docker from docker.com; Compose v2
+ships with it.
+
+### Check your host is ready
+
+```bash
+./lab.sh doctor     # verifies docker is installed, the daemon is reachable,
+                    # and Compose is available — with a fix for anything missing
+```
+
+Run this first if `./lab.sh up` errors (e.g. `unknown flag: --profile` means
+Compose is not installed; `permission denied ... docker.sock` means the daemon
+isn't reachable or your user isn't in the `docker` group).
 
 ## Quick start
 
 ```bash
+./lab.sh doctor                 # verify docker + compose are ready (see Requirements)
 cp .env.example .env            # optionally pin PHP_TAG to the version you assess
 ./lab.sh up                     # build + start target and analysis box (sealed net)
 ./lab.sh check                  # prove the analysis box has no internet route

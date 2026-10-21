@@ -3,7 +3,16 @@
 # Runs entirely inside the offline lab. Nothing here is an exploit.
 set -uo pipefail
 cd "$(dirname "$0")"
-C="docker compose"
+
+# Resolve the Compose CLI: v2 plugin ("docker compose") or standalone ("docker-compose").
+if docker compose version >/dev/null 2>&1; then
+  C="docker compose"
+elif command -v docker-compose >/dev/null 2>&1; then
+  C="docker-compose"
+else
+  echo "Docker Compose not found. Install it with:  sudo apt install docker-compose" >&2
+  exit 1
+fi
 
 echo "== 0. isolation check =="
 ./lab.sh check || { echo "[abort] lab is not isolated"; exit 1; }
