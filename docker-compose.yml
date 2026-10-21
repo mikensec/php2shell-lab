@@ -1,0 +1,61 @@
+# PHP2Shell detection lab — offline, reproducible, bring-your-own-sample.
+#
+# This stack builds NO exploit. It stands up an instrumented PHP target and an
+# analysis box on an isolated network so a defender can observe an untrusted PoC
+# they supply themselves and extract detection artifacts (pcap, logs, traces).
+#
+#   docker compose up -d            # start target + capture
+#   ./lab.sh triage                 # static-only review of ./sample/*.py
+#   ./lab.sh run ./sample/poc.py    # detonate under capture (you supply the PoC)
+#   ./lab.sh collect                # write ./artifacts bundle
+#   docker compose down -v          # tear down
+#
+# The `labnet` network is internal: containers reach each other and NOTHING else
+# (no host, no internet). Do not remove `internal: true`.
+
+services:
+  target:
+    container_name: php2shell-target
+    # Pin the PHP version you are assessing once affected versions are published.
+    # Example: PHP_TAG=8.3.35-apache  (defaults to a current patched tag so the
+    # repo ships safe; override in .env to reproduce the vulnerable build YOURSELF).
+    build:
+      context: ./victim
+      args:
+        PHP_TAG: ${PHP_TAG:-8.3-apache}
+    networks: [labnet]
+    cap_drop: [ALL]
+    cap_add: [NET_RAW, NET_ADMIN]        # tcpdump inside the container only
+    security_opt: ["no-new-privileges:true"]
+    read_only: false
+    tmpfs: ["/run", "/tmp"]
+    volumes:
+      - captures:/captures
+    # no published ports: nothing is exposed to the host
+
+  analysis:
+    build: ./analysis
+    container_name: php2shell-analysis
+    hostname: analysis
+    networks: [labnet]
+    cap_drop: [ALL]
+    cap_add: [NET_RAW, SYS_PTRACE]       # tcpdump + strace of the detonated PoC
+    security_opt: ["no-new-privileges:true"]
+    # The sample is mounted READ-ONLY and lives outside git (./sample is .gitignored).
+    volumes:
+      - ./sample:/sample:ro
+      - ./artifacts:/artifacts
+      - captures:/captures
+    working_dir: /opt/lab
+    # keep it alive; it does nothing until you invoke lab.sh
+    command: ["sleep", "infinity"]
+    pids_limit: 256
+    mem_limit: 1g
+
+networks:
+  labnet:
+    internal: true          # <-- the isolation. air-gapped from host + internet.
+    driver: bridge
+
+volumes:
+  captures:

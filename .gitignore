@@ -1,0 +1,9 @@
+# NEVER commit samples or captured artifacts.
+sample/*
+!sample/.gitkeep
+!sample/README.md
+artifacts/*
+!artifacts/.gitkeep
+*.pcap
+*.tar.gz
+.env
