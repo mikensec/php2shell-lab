@@ -1,0 +1,50 @@
+# PHP session.upload_progress abuse — network detection
+# Research tracking: CVE-2026-109618 / CVE-2026-109619 ("PHP2Shell")
+# Defensive, behavioral, PRE-ADVISORY. Original rules; sid range 30260000+.
+# Requires HTTP request-body inspection in suricata.yaml (request-body-limit
+# large enough to see the markers; MPM/stream reassembly on).
+
+# 1) Arming shape: a single multipart POST that carries BOTH the upload-progress
+#    marker field and a session-id field in the body (cookie-less sid set).
+alert http $EXTERNAL_NET any -> $HOME_NET any ( \
+    msg:"PHP upload_progress arming: PHP_SESSION_UPLOAD_PROGRESS + PHPSESSID in multipart body"; \
+    flow:established,to_server; http.method; content:"POST"; \
+    http.request_body; content:"PHP_SESSION_UPLOAD_PROGRESS"; nocase; \
+    http.request_body; content:"PHPSESSID"; nocase; distance:0; \
+    classtype:web-application-attack; \
+    metadata:cve CVE-2026-109618, cve CVE-2026-109619, confidence Medium; \
+    flowbits:set,php.up.arming; \
+    sid:30260001; rev:1;)
+
+# 2) Content-injection shape: body carries the progress marker AND a PHP open tag
+#    (the text that lands verbatim in the session file).
+alert http $EXTERNAL_NET any -> $HOME_NET any ( \
+    msg:"PHP upload_progress content injection: progress marker + PHP open tag in body"; \
+    flow:established,to_server; http.method; content:"POST"; \
+    http.request_body; pcre:"/(?i)(PHP_SESSION_UPLOAD_PROGRESS|upload_progress_)/"; \
+    http.request_body; pcre:"/<\?(php|=)/i"; \
+    classtype:web-application-attack; \
+    metadata:cve CVE-2026-109618, cve CVE-2026-109619, confidence High; \
+    sid:30260002; rev:1;)
+
+# 3) Groom shape: many repeated identically-named array parts in one body
+#    (heap-grooming stage seen in public PoC bundles). Tune count to your traffic.
+alert http $EXTERNAL_NET any -> $HOME_NET any ( \
+    msg:"PHP upload_progress groom: many repeated multipart array parts"; \
+    flow:established,to_server; http.method; content:"POST"; \
+    http.request_body; content:"multipart/form-data"; nocase; \
+    http.request_body; content:"name=|22|t[]|22|"; nocase; \
+    detection_filter:track by_dst, count 60, seconds 30; \
+    classtype:web-application-attack; \
+    metadata:cve CVE-2026-109618, confidence Low; \
+    sid:30260003; rev:1;)
+
+# 4) Post-arming filename carrying a PHP tag (uploaded filename is stored verbatim).
+alert http $EXTERNAL_NET any -> $HOME_NET any ( \
+    msg:"PHP upload_progress: upload filename contains PHP open tag after arming"; \
+    flow:established,to_server; flowbits:isset,php.up.arming; \
+    http.request_body; content:"filename="; nocase; \
+    http.request_body; pcre:"/filename=\"[^\"]*<\?(php|=)/i"; \
+    classtype:web-application-attack; \
+    metadata:cve CVE-2026-109618, confidence High; \
+    sid:30260004; rev:1;)

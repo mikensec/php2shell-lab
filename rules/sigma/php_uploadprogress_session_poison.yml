@@ -1,0 +1,65 @@
+title: PHP session.upload_progress poisoning indicators
+id: 7f3a1c9e-2d84-4a1b-9c21-109618109619aa
+status: experimental
+description: >
+  Detects indicators of PHP session.upload_progress abuse (CVE-2026-109618 /
+  CVE-2026-109619 research): the PHP request-startup warning emitted on the
+  multipart parse-bail path, and session files poisoned with PHP code. Behavioral
+  and pre-advisory; validate against your own lab capture.
+references:
+  - https://github.com/mikensec/php2shell-lab
+author: php2shell-lab
+date: 2026/10/21
+logsource:
+  product: php
+  service: php_error
+detection:
+  startup_warning:
+    message|contains|all:
+      - 'PHP Request Startup:'
+      - 'in Unknown on line 0'
+  poison_write:
+    message|contains: 'upload_progress_'
+  condition: startup_warning or poison_write
+falsepositives:
+  - Benign startup warnings from unrelated misconfiguration
+  - Applications that legitimately expose session.upload_progress with verbose logging
+level: medium
+---
+title: Web server or PHP-FPM spawning a shell (possible PHP RCE follow-on)
+id: 9b2e55d7-6c10-4f3a-8e44-109618109619bb
+status: experimental
+description: >
+  A PHP / php-fpm / web-server worker spawning an interactive shell or network
+  tool is a strong post-exploitation signal for any PHP RCE chain, including an
+  include() sink fed by a poisoned session file.
+references:
+  - https://github.com/mikensec/php2shell-lab
+author: php2shell-lab
+date: 2026/10/21
+logsource:
+  category: process_creation
+  product: linux
+detection:
+  parent:
+    ParentImage|endswith:
+      - '/php-fpm'
+      - '/php'
+      - '/apache2'
+      - '/httpd'
+      - '/nginx'
+  child:
+    Image|endswith:
+      - '/sh'
+      - '/bash'
+      - '/dash'
+      - '/nc'
+      - '/ncat'
+      - '/socat'
+      - '/python'
+      - '/python3'
+      - '/perl'
+  condition: parent and child
+falsepositives:
+  - Legitimate app features that shell out (build tools, imagemagick wrappers)
+level: high
